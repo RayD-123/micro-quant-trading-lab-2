@@ -51,7 +51,7 @@ def run_quant_ultimate():
 
     # --- 3. 批量下载历史数据 (性能优化) ---
     # 如果标的超过 100 个，yfinance 可能会很慢，我们增加处理逻辑
-    print(f"📥 正在下载 {len(ticker_list)} 只标的历史行情...")
+    print(f"Downloading history for {len(ticker_list)} tickers...")
     data = yf.download(ticker_list, period="1y", interval="1d", group_by='ticker', threads=True, progress=False)
 
     # --- 4. 技术面扫描引擎 ---
