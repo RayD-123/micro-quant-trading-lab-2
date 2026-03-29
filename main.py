@@ -139,7 +139,8 @@ def save_report(ny_time, results):
 
 def generate_empty_report(ny_time, reason):
     report = f"# 🦅 量化狙击手 5.2 报告\n\n**🗽 纽约时间: {ny_time}**\n\n### ❌ 运行中断: {reason}"
-    with open("report.md", "w", encoding="utf-8") as f:
+# 之前是 "report.md"
+    with open("report_global.md", "w", encoding="utf-8") as f:
         f.write(report)
 
 if __name__ == "__main__":
