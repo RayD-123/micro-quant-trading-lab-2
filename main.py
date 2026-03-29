@@ -11,16 +11,38 @@ def run_quant_ultimate():
     ny_time = datetime.now(tz_ny).strftime('%Y-%m-%d %H:%M:%S')
     print(f"🚀 启动量化系统 | 纽约时间: {ny_time}")
     
-    # --- 2. 筛选标普 500 基本面 ---
+    # --- 2. 筛选标普 500 基本面 (严谨版) ---
     try:
         fso = Overview()
         fso.set_filter(filters_dict={'Index': 'S&P 500'})
         df_base = fso.screener_view()
+        
+        # 核心：精准匹配。如果没有这个指标，直接抛出异常，不继续运行。
+        # 我们在这里搜寻包含 'Return on Equity' 的列
+        actual_columns = df_base.columns.tolist()
+        roe_matches = [c for c in actual_columns if 'Return on Equity' in c]
+        
+        if not roe_matches:
+            # 这里的报错会直接显示在你的 GitHub Action 日志里
+            error_msg = f"❌ 严重错误：在 Finviz 返回的列中未找到 'Return on Equity'。\n当前可用列名为: {actual_columns}"
+            raise ValueError(error_msg)
+            
+        target_roe_col = roe_matches[0]
+        df_base['ROE'] = pd.to_numeric(df_base[target_roe_col].str.replace('%',''), errors='coerce') / 100
+        
+        # 同样的逻辑检查 P/E
+        if 'P/E' not in df_base.columns:
+            raise ValueError(f"❌ 未找到 P/E 列。当前列名: {actual_columns}")
+            
         df_base['P/E'] = pd.to_numeric(df_base['P/E'], errors='coerce')
-        df_base['ROE'] = pd.to_numeric(df_base['Return on Equity'].str.replace('%',''), errors='coerce') / 100
         ticker_list = df_base['Ticker'].tolist()
+        print(f"✅ 成功匹配指标: {target_roe_col}")
+
     except Exception as e:
-        print(f"数据抓取失败: {e}"); return
+        # 这里我们不再创建空的 report.md，直接让 Python 抛出错误
+        # 这样 GitHub Action 的 'Run Script' 这一步会变红，你会收到报错邮件
+        print(f"\n‼️ 脚本由于数据结构变更停止运行:\n{str(e)}")
+        raise e
 
     # --- 3. 批量下载历史数据 ---
     data = yf.download(ticker_list, period="1y", group_by='ticker', threads=True)
