@@ -1,0 +1,28 @@
+name: Daily Stock Scan
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 21 * * *' # 纽约收盘后自动运行
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Run
+        run: python main.py
+      - name: Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add report.md
+          git commit -m "Update report with NY time" || exit 0
+          git push origin HEAD
