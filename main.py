@@ -11,38 +11,37 @@ def run_quant_ultimate():
     ny_time = datetime.now(tz_ny).strftime('%Y-%m-%d %H:%M:%S')
     print(f"🚀 启动量化系统 | 纽约时间: {ny_time}")
     
-    # --- 2. 筛选标普 500 基本面 (严谨版) ---
+    # --- 2. 筛选标普 500 基本面 (严谨修复版) ---
     try:
+        from finvizfinance.screener.financial import Financial # 引入专门的财务视图
+        
+        # 第一步：获取基础信息 (Ticker, P/E 等)
         fso = Overview()
         fso.set_filter(filters_dict={'Index': 'S&P 500'})
-        df_base = fso.screener_view()
+        df_overview = fso.screener_view()
         
-        # 核心：精准匹配。如果没有这个指标，直接抛出异常，不继续运行。
-        # 我们在这里搜寻包含 'Return on Equity' 的列
-        actual_columns = df_base.columns.tolist()
-        roe_matches = [c for c in actual_columns if 'Return on Equity' in c]
+        # 第二步：获取财务信息 (ROE)
+        fsf = Financial()
+        fsf.set_filter(filters_dict={'Index': 'S&P 500'})
+        df_financial = fsf.screener_view()
         
-        if not roe_matches:
-            # 这里的报错会直接显示在你的 GitHub Action 日志里
-            error_msg = f"❌ 严重错误：在 Finviz 返回的列中未找到 'Return on Equity'。\n当前可用列名为: {actual_columns}"
-            raise ValueError(error_msg)
-            
-        target_roe_col = roe_matches[0]
-        df_base['ROE'] = pd.to_numeric(df_base[target_roe_col].str.replace('%',''), errors='coerce') / 100
+        # 第三步：合并两个表格
+        df_base = pd.merge(df_overview, df_financial[['Ticker', 'Return on Equity']], on='Ticker')
         
-        # 同样的逻辑检查 P/E
-        if 'P/E' not in df_base.columns:
-            raise ValueError(f"❌ 未找到 P/E 列。当前列名: {actual_columns}")
-            
+        # 严谨性检查
+        if 'Return on Equity' not in df_base.columns:
+            raise ValueError(f"❌ 依旧无法获取 ROE 数据。当前列: {df_base.columns.tolist()}")
+
+        # 数据清洗
+        df_base['ROE'] = pd.to_numeric(df_base['Return on Equity'].str.replace('%',''), errors='coerce') / 100
         df_base['P/E'] = pd.to_numeric(df_base['P/E'], errors='coerce')
+        
         ticker_list = df_base['Ticker'].tolist()
-        print(f"✅ 成功匹配指标: {target_roe_col}")
+        print(f"✅ 成功获取 {len(ticker_list)} 只标的的基本面数据 (含 ROE)")
 
     except Exception as e:
-        # 这里我们不再创建空的 report.md，直接让 Python 抛出错误
-        # 这样 GitHub Action 的 'Run Script' 这一步会变红，你会收到报错邮件
-        print(f"\n‼️ 脚本由于数据结构变更停止运行:\n{str(e)}")
-        raise e
+        print(f"\n‼️ 数据源抓取失败，请检查 Finviz 接口:\n{str(e)}")
+        raise e # 严谨起见，直接中断，不生成任何报告
 
     # --- 3. 批量下载历史数据 ---
     data = yf.download(ticker_list, period="1y", group_by='ticker', threads=True)
