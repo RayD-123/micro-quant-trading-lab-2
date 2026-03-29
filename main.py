@@ -11,38 +11,52 @@ def run_quant_ultimate():
     ny_time = datetime.now(tz_ny).strftime('%Y-%m-%d %H:%M:%S')
     print(f"🚀 启动量化系统 | 纽约时间: {ny_time}")
     
-    # --- 2. 筛选标普 500 基本面 (严谨修复版) ---
+    # --- 2. 筛选标普 500 基本面 (高效合并版) ---
     try:
-        from finvizfinance.screener.financial import Financial # 引入专门的财务视图
-        
-        # 第一步：获取基础信息 (Ticker, P/E 等)
+        from finvizfinance.screener.overview import Overview
+        from finvizfinance.screener.valuation import Valuation # 引入估值视图
+
+        # 1. 抓取 Overview (获取 P/E)
         fso = Overview()
         fso.set_filter(filters_dict={'Index': 'S&P 500'})
         df_overview = fso.screener_view()
         
-        # 第二步：获取财务信息 (ROE)
-        fsf = Financial()
-        fsf.set_filter(filters_dict={'Index': 'S&P 500'})
-        df_financial = fsf.screener_view()
-        
-        # 第三步：合并两个表格
-        df_base = pd.merge(df_overview, df_financial[['Ticker', 'Return on Equity']], on='Ticker')
-        
-        # 严谨性检查
-        if 'Return on Equity' not in df_base.columns:
-            raise ValueError(f"❌ 依旧无法获取 ROE 数据。当前列: {df_base.columns.tolist()}")
+        # 2. 抓取 Valuation (ROE 通常在这里)
+        fsv = Valuation()
+        fsv.set_filter(filters_dict={'Index': 'S&P 500'})
+        df_valuation = fsv.screener_view()
 
-        # 数据清洗
-        df_base['ROE'] = pd.to_numeric(df_base['Return on Equity'].str.replace('%',''), errors='coerce') / 100
+        # 打印列名调试 (只运行这一次，稳了以后可以删掉)
+        print(f"📊 Valuation 视图列名: {df_valuation.columns.tolist()}")
+
+        # 3. 本地 Merge (根据 Ticker 对齐)
+        # 我们只需要 Valuation 里的 Ticker 和 ROE 相关列
+        # 匹配包含 'ROE' 或 'Return on Equity' 的列名
+        roe_col = [c for c in df_valuation.columns if 'ROE' in c or 'Equity' in c]
+        
+        if not roe_col:
+            raise ValueError("❌ 在 Valuation 视图中依然没找到 ROE 列，Finviz 可能又改版了")
+
+        df_base = pd.merge(
+            df_overview[['Ticker', 'P/E', 'Price']], 
+            df_valuation[['Ticker', roe_col[0]]], 
+            on='Ticker'
+        )
+
+        # 4. 严谨清洗
+        df_base['ROE'] = pd.to_numeric(df_base[roe_col[0]].str.replace('%',''), errors='coerce') / 100
         df_base['P/E'] = pd.to_numeric(df_base['P/E'], errors='coerce')
         
-        ticker_list = df_base['Ticker'].tolist()
-        print(f"✅ 成功获取 {len(ticker_list)} 只标的的基本面数据 (含 ROE)")
+        # 最终筛选：ROE > 15% 且 P/E < 25
+        df_final = df_base[(df_base['ROE'] > 0.15) & (df_base['P/E'] < 25)]
+        ticker_list = df_final['Ticker'].tolist()
+        
+        print(f"✅ 筛选完成！从 500 只中选出 {len(ticker_list)} 只符合双指标的绩优股")
 
     except Exception as e:
-        print(f"\n‼️ 数据源抓取失败，请检查 Finviz 接口:\n{str(e)}")
-        raise e # 严谨起见，直接中断，不生成任何报告
-
+        print(f"\n‼️ 数据合并失败:\n{str(e)}")
+        raise e
+        
     # --- 3. 批量下载历史数据 ---
     data = yf.download(ticker_list, period="1y", group_by='ticker', threads=True)
 
