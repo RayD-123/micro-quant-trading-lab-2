@@ -18,7 +18,7 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
-        ref: smart-timing
+        ref: field-6.0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -37,4 +37,4 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add report_smart.md
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update Report [skip ci]" && git push origin smart-timing)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update Report [skip ci]" && git push origin field-6.0)
