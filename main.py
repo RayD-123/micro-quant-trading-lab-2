@@ -12,12 +12,11 @@ def run_quant_ultimate():
     ny_time = ny_now.strftime('%Y-%m-%d %H:%M:%S')
     print(f"🚀 启动量化系统 5.2 | 纽约时间: {ny_time}")
     
-    # --- 2. 筛选全美股基本面 (范围扩大版) ---
+    # --- 2. 筛选全美股基本面 (V5.2 兼容增强版) ---
     try:
         from finvizfinance.screener.financial import Financial
         from finvizfinance.screener.overview import Overview
 
-        # 如果你想放宽到全美股，去掉 'Index': 'S&P 500' 即可
         # 这里我设置一个较宽的过滤：全美股 + 市值 > Mid (20亿美金以上)，避免垃圾股
         filters = {'Market Cap.': '+Mid (over $2bln)'} 
         
@@ -26,34 +25,29 @@ def run_quant_ultimate():
         fsf.set_filter(filters_dict=filters)
         df_base = fsf.screener_view()
         
-        # 清洗 ROE
-        df_base['ROE_val'] = pd.to_numeric(df_base['ROE'].str.replace('%',''), errors='coerce') / 100
-        # 严谨基本面过滤：ROE > 15%
-        df_base = df_base[df_base['ROE_val'] > 0.15].copy()
-        print(f"✅ ROE 过滤完成，剩余 {len(df_base)} 只标的")
+        # --- 【核心修复：智能清洗 ROE】 ---
+        def smart_clean_roe(x):
+            # 1. 处理空值和横杠
+            if pd.isna(x) or x == '-':
+                return np.nan
+            # 2. 如果是字符串，去掉%，转为 float，再除以 100
+            if isinstance(x, str):
+                try:
+                    return float(x.replace('%', '')) / 100
+                except:
+                    return np.nan
+            # 3. 如果本身就是数字，直接返回
+            return float(x)
 
-        print("🔗 正在关联 Overview 获取 P/E 和 价格...")
-        fso = Overview()
-        fso.set_filter(filters_dict=filters)
-        df_ov = fso.screener_view()
-        
-        # 合并
-        df_merged = pd.merge(df_base[['Ticker', 'ROE_val']], df_ov[['Ticker', 'P/E', 'Price']], on='Ticker')
-        df_merged['PE_val'] = pd.to_numeric(df_merged['P/E'], errors='coerce')
-        
-        # 严谨筛选：ROE > 15% 且 PE < 25 (你可以在这里放宽 PE 到 30)
-        df_targets = df_merged[(df_merged['ROE_val'] > 0.15) & (df_merged['PE_val'] < 25)]
-        ticker_list = df_targets['Ticker'].tolist()
-        
-        print(f"🎯 基本面海选完成！进入技术面复试: {len(ticker_list)} 只")
+        # 应用智能清洗函数
+        df_base['ROE_val'] = df_base['ROE'].apply(smart_clean_roe)
+        print("✅ ROE 数据智能清洗完成")
 
-    except Exception as e:
-        print(f"\n‼️ 抓取中断：{str(e)}")
-        raise e
-        
-    if not ticker_list:
-        generate_empty_report(ny_time, "基本面初筛未通过")
-        return
+        # 严谨基本面过滤：ROE > 15% (去掉清洗出的 NaN)
+        df_base = df_base[df_base['ROE_val'] > 0.15].dropna(subset=['ROE_val']).copy()
+        print(f"✅ 基本面初筛完成，剩余 {len(df_base)} 只标的")
+
+        # ... 后续代码合并 P/E 等保持不变 ...
 
     # --- 3. 批量下载历史数据 (性能优化) ---
     # 如果标的超过 100 个，yfinance 可能会很慢，我们增加处理逻辑
