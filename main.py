@@ -11,46 +11,42 @@ def run_quant_ultimate():
     ny_time = datetime.now(tz_ny).strftime('%Y-%m-%d %H:%M:%S')
     print(f"🚀 启动量化系统 | 纽约时间: {ny_time}")
     
-    # --- 2. 筛选标普 500 基本面 (终极兼容版) ---
+    # --- 2. 筛选标普 500 基本面 (V5.1 完美匹配版) ---
     try:
         from finvizfinance.screener.financial import Financial
         from finvizfinance.screener.overview import Overview
 
-        # 1. 尝试直接从 Financial 视图拿，这是目前唯一包含 ROE 的批量表
+        # 1. 直接去 Financial 页面拿数据
+        print("🚀 正在访问 Financial 视图获取 ROE...")
         fsf = Financial()
         fsf.set_filter(filters_dict={'Index': 'S&P 500'})
         df_base = fsf.screener_view()
         
-        # 打印当前列名，让我们看看它到底把 ROE 藏哪了
-        cols = df_base.columns.tolist()
-        print(f"📊 Financial 视图列名: {cols}")
+        # 2. 清洗 ROE (适配你截图里的 'ROE' 列)
+        def clean_roe(x):
+            if pd.isna(x) or x == '-': return 0
+            if isinstance(x, str):
+                return float(x.replace('%', '')) / 100
+            return float(x) # 如果已经是数字直接返回
 
-        # 2. 动态寻找 ROE 列（预防它改名，比如叫 'ROE' 或 'Return on Equity'）
-        roe_col = [c for c in cols if 'ROE' in c or 'Equity' in c]
-        pe_col = [c for c in cols if 'P/E' == c or 'PE' == c]
+        df_base['ROE_val'] = df_base['ROE'].apply(clean_roe)
+        print(f"✅ 成功清洗 ROE 数据")
 
-        if not roe_col:
-            raise ValueError(f"❌ 还是没找到 ROE 列。目前看到的列有: {cols}")
-
-        # 3. 数据清洗与筛选
-        df_base['ROE_val'] = pd.to_numeric(df_base[roe_col[0]].str.replace('%',''), errors='coerce') / 100
+        # 3. 获取 P/E (Financial 表里没 P/E，我们需要关联 Overview)
+        print("🔗 正在关联 Overview 视图获取 P/E...")
+        fso = Overview()
+        fso.set_filter(filters_dict={'Index': 'S&P 500'})
+        df_ov = fso.screener_view()
         
-        # 如果 Financial 视图里没有 P/E，我们就手动把 P/E 默认为 0 (或者关联 Overview 表)
-        if pe_col:
-            df_base['PE_val'] = pd.to_numeric(df_base[pe_col[0]], errors='coerce')
-        else:
-            # 如果这表里没 PE，我们再拿一次 Overview 关联一下
-            fso = Overview()
-            fso.set_filter(filters_dict={'Index': 'S&P 500'})
-            df_ov = fso.screener_view()
-            df_base = pd.merge(df_base, df_ov[['Ticker', 'P/E']], on='Ticker')
-            df_base['PE_val'] = pd.to_numeric(df_base['P/E'], errors='coerce')
+        # 合并两张表
+        df_final_merge = pd.merge(df_base[['Ticker', 'ROE_val']], df_ov[['Ticker', 'P/E', 'Price']], on='Ticker')
+        df_final_merge['PE_val'] = pd.to_numeric(df_final_merge['P/E'], errors='coerce')
 
-        # 4. 严谨筛选
-        df_final = df_base[(df_base['ROE_val'] > 0.15) & (df_base['PE_val'] < 25)]
-        ticker_list = df_final['Ticker'].tolist()
+        # 4. 严谨筛选: ROE > 15% 且 P/E < 25
+        df_targets = df_final_merge[(df_final_merge['ROE_val'] > 0.15) & (df_final_merge['PE_val'] < 25)]
+        ticker_list = df_targets['Ticker'].tolist()
         
-        print(f"✅ 成功！在 Financial 视图中筛选出 {len(ticker_list)} 只符合标准的股票")
+        print(f"🎯 筛选完成！符合条件的标的: {ticker_list}")
 
     except Exception as e:
         print(f"\n‼️ 严谨性拦截：{str(e)}")
