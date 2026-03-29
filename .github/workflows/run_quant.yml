@@ -32,9 +32,10 @@ jobs:
     - name: Run Engine
       run: python main.py
 
-    - name: Push Report
+    - name: Push Report and Database
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add report_smart.md
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update Report [skip ci]" && git push origin field-6.0)
+        git add history_database/*.csv  # <--- 关键：确保 CSV 也能被追踪
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update 6.1 [skip ci]" && git push origin field-6.0)
