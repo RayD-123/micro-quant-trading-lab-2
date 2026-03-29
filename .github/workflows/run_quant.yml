@@ -1,22 +1,24 @@
-name: Global Market Quant Scan
+name: Smart Timing Quant Scan
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - global-scan
+  schedule:
+    # 纽约时间 9:35 AM (周一到周五) -> UTC 13:35
+    - cron: '35 13 * * 1-5'
+    # 纽约时间 4:05 PM (周一到周五) -> UTC 20:05
+    - cron: '05 20 * * 1-5'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 关键权限
+      contents: write
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
-        ref: global-scan # 强制指定检出当前分支
+        ref: smart-timing
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -25,15 +27,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install yfinance finvizfinance pandas numpy pandas_market_calendars pytz tabulate
+        pip install yfinance finvizfinance pandas numpy tabulate pytz
 
-    - name: Run Quant Engine
+    - name: Run Engine
       run: python main.py
 
-    - name: Push Report to Global Branch
+    - name: Push Report
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add report_global.md  # 这里改成新名字
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Update Global Report" && git push origin global-scan)
+        git add report_smart.md
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update Report [skip ci]" && git push origin smart-timing)
