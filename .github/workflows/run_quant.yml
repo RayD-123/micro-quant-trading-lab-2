@@ -36,6 +36,8 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
+        git pull origin field-6.0 --rebase  # <--- 加入这一行，先同步云端改动
         git add report_smart.md
-        git add history_database/*.csv  # <--- 关键：确保 CSV 也能被追踪
+        git add history_database/*.csv
+        # 只有在有改动时才 commit，避免报错
         git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update 6.1 [skip ci]" && git push origin field-6.0)
