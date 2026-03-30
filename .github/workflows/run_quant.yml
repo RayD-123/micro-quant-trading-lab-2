@@ -36,8 +36,18 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git pull origin field-6.0 --rebase  # <--- 加入这一行，先同步云端改动
+        
+        # 1. 把新生成的报告暂时藏起来 (Stash)
+        git add .
+        git stash
+        
+        # 2. 拉取远端最新的代码 (比如你刚刚在网页上改的注释)
+        git pull origin field-6.0 --rebase
+        
+        # 3. 把报告拿回来 (Unstash)
+        git stash pop || echo "No changes to pop"
+        
+        # 4. 再次添加并提交
         git add report_smart.md
         git add history_database/*.csv
-        # 只有在有改动时才 commit，避免报错
         git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update 6.1 [skip ci]" && git push origin field-6.0)
