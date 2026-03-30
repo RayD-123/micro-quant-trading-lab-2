@@ -138,5 +138,5 @@ def generate_empty_report(ny_time, reason):
     with open("report_smart.md", "w", encoding="utf-8") as f:
         f.write(f"# 🦅 报告中断\n\n时间: {ny_time}\n原因: {reason}")
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     run_quant_ultimate()
